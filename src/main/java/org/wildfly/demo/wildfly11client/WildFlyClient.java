@@ -148,8 +148,8 @@ public class WildFlyClient {
             contents = waitForRespose("out/TigerServ", "localhost", 8080);
             System.out.println(contents);
 
-            // web should return something like:
-            // Served jar:1491340851960:/DWe87rbb:Util:0
+            // web should return something like below.  Note the "Util" segment has changed to "Util6"
+            // Served jar:1491340851960:/DWe87rbb:Util6:0
             split = contents.split(":");
             if (split.length != 5) {
                 System.out.println("Failed expected segment count");
