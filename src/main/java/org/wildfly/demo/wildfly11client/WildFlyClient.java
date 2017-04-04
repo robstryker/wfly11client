@@ -49,18 +49,42 @@ public class WildFlyClient {
     public static final String DATA_PREFIX = "/home/rob/Documents/programming/bugs/wf11client/wfly11client/data/";
 
     public static void main(String[] args) throws Exception {
-        System.out.println("BEgin");
-        new WildFlyClient().run();
+        new WildFlyClient().runIncrementalTest();
     }
 
     ModelControllerClient client;
     ServerDeploymentManager manager;
 
-    private void run() throws Exception {
-        runWF11Test();
+    public void runExplodedTest() throws Exception {
+        try {
+            this.client = ModelControllerClient.Factory.create("localhost", 9990, new TestWF11CallbackHandler(), null,
+                    30000);
+            this.manager = ServerDeploymentManager.Factory.create(client);
+
+            undeploy("out.war", true);
+            DeploymentOperationResult result = deploy("out.war",
+                    new File(DATA_PREFIX + "out_with_jar.war"),
+                    new String[] { "out.war", "out.war/WEB-INF/lib/UtilOne.jar" }, true);
+            waitFor(result, "Some task");
+
+            System.out.println(result.getStatus().getResult());
+            if (result.getStatus().getResult() != ServerUpdateActionResult.Result.EXECUTED) {
+                System.out.println("Failed to execute:" + result.getStatus().getResult());
+                throw new Exception("Failed");
+            }
+            String contents = waitForRespose("out/TigerServ", "localhost", 8080);
+            System.out.println(contents);
+            if (!contents.startsWith("Served jar:")) {
+                System.out.println("Failed expected output prefix");
+                throw new Exception("Failed");
+            }
+        } finally {
+            client.close();
+        }
     }
 
-    private void runWF11Test() throws Exception {
+
+    public void runIncrementalTest() throws Exception {
         try {
             this.client = ModelControllerClient.Factory.create("localhost", 9990, new TestWF11CallbackHandler(), null,
                     30000);
