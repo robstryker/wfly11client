@@ -46,10 +46,11 @@ public class WildFlyClient {
 
     public static final String USER = "test4";
     public static final String PASS = "testpassword1";
+    public static final String DATA_PREFIX = "/home/rob/Documents/programming/bugs/wf11client/wfly11client/data/";
 
     public static void main(String[] args) throws Exception {
+        System.out.println("BEgin");
         new WildFlyClient().run();
-
     }
 
     ModelControllerClient client;
@@ -68,26 +69,26 @@ public class WildFlyClient {
             undeploy("out.war", true);
 
             DeploymentOperationResult result = deploy("out.war",
-                    new File("/home/rob/apps/eclipse/workspaces/neon/AMaanagementTest/data/out_initial.war"),
+                    new File(DATA_PREFIX + "out_initial.war"),
                     new String[] { "out.war" }, true);
             waitFor(result, "Some task");
             System.out.println(result.getStatus().getResult());
             if (result.getStatus().getResult() != ServerUpdateActionResult.Result.EXECUTED) {
                 System.out.println("Failed to execute:" + result.getStatus().getResult());
-                return;
+                throw new Exception("Failed");
             }
             String contents = waitForRespose("out/TigerServ", "localhost", 8080);
             System.out.println(contents);
             if (!contents.startsWith("Served at:")) {
                 System.out.println("Failed expected output");
-                return;
+                throw new Exception("Failed");
             }
 
             IncrementalManagementModel m = new IncrementalManagementModel();
             Map<String, String> changedContent = new HashMap<String, String>();
             List<String> removedContent = new ArrayList<String>();
             changedContent.put("WEB-INF/classes/my/pak/TigerServ.class",
-                    "/home/rob/apps/eclipse/workspaces/neon/AManagementTest/data/TigerServ_change1.class");
+                    DATA_PREFIX + "TigerServ_change1.class");
             m.put("out.war", changedContent, removedContent);
             incrementalPublish("out.war", m, true);
 
@@ -95,26 +96,26 @@ public class WildFlyClient {
             System.out.println(contents);
             if (!contents.startsWith("Served with:")) {
                 System.out.println("Failed expected output");
-                return;
+                throw new Exception("Failed");
             }
 
             // Do a full publish with a war that has a nested jar
             undeploy("out.war", true);
 
             result = deploy("out.war",
-                    new File("/home/rob/apps/eclipse/workspaces/neon/AMaanagementTest/data/out_with_jar.war"),
+                    new File(DATA_PREFIX + "out_with_jar.war"),
                     new String[] { "out.war" }, true);
             waitFor(result, "Some task");
             System.out.println(result.getStatus().getResult());
             if (result.getStatus().getResult() != ServerUpdateActionResult.Result.EXECUTED) {
                 System.out.println("Failed to execute:" + result.getStatus().getResult());
-                return;
+                throw new Exception("Failed");
             }
             contents = waitForRespose("out/TigerServ", "localhost", 8080);
             System.out.println(contents);
             if (!contents.startsWith("Served jar:")) {
                 System.out.println("Failed expected output prefix");
-                return;
+                throw new Exception("Failed");
             }
 
             // web should return something like:
@@ -123,10 +124,11 @@ public class WildFlyClient {
             String[] split = contents.split(":");
             if (split.length != 5) {
                 System.out.println("Failed expected segment count");
-                return;
+                throw new Exception("Failed");
             }
             if (!split[3].equals("Util")) {
                 System.out.println("Fourth segment should be 'Util'");
+                throw new Exception("Failed");
             }
 
             // incrementally update the class file inside the jar inside the war
@@ -134,13 +136,13 @@ public class WildFlyClient {
             changedContent = new HashMap<String, String>();
             removedContent = new ArrayList<String>();
             changedContent.put("util/pak/UtilModel.class",
-                    "/home/rob/apps/eclipse/workspaces/neon/AMaanagementTest/data/UtilModel_Change1.class");
+                    DATA_PREFIX + "UtilModel_Change1.class");
             m.put("out.war/WEB-INF/lib/UtilOne.jar", changedContent, removedContent);
             ServerDeploymentActionResult r = incrementalPublish("out.war/WEB-INF/lib/UtilOne.jar", m, true);
             System.out.println(r.getResult());
             if (r.getResult() == Result.NOT_EXECUTED) {
                 System.out.println("Failed incremental change to file inside util jar inside war");
-                return;
+                throw new Exception("Failed");
             }
 
             contents = waitForRespose("out/TigerServ", "localhost", 8080);
@@ -151,15 +153,12 @@ public class WildFlyClient {
             split = contents.split(":");
             if (split.length != 5) {
                 System.out.println("Failed expected segment count");
-                return;
+                throw new Exception("Failed");
             }
             if (!split[3].equals("Util6")) {
                 System.out.println("Fourth segment should be 'Util6'");
+                throw new Exception("Failed");
             }
-
-        } catch (Exception e) {
-            System.out.println("Fail");
-            e.printStackTrace();
         } finally {
             client.close();
         }
