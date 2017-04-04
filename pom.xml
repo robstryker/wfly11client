@@ -8,7 +8,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>org.wildfly.demo</groupId>
     <artifactId>WildFly11Client</artifactId>
-    <version>3.0.0.Beta11-SNAPSHOT</version>
+    <version>3.0.0.Beta4-SNAPSHOT</version>
     <packaging>jar</packaging>
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
