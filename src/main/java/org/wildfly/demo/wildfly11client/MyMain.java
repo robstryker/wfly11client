@@ -40,13 +40,13 @@ import org.wildfly.security.password.interfaces.ClearPassword;
 import org.wildfly.security.password.interfaces.DigestPassword;
 import org.wildfly.security.util.CodePointIterator;
 
-public class WildFlyClient {
+public class MyMain {
 	
 	public static final String USER = "test4";
 	public static final String PASS = "testpassword1";
 	
 	public static void main(String[] args) throws Exception {
-		new WildFlyClient().run();
+		new MyMain().run();
 
 	}
 
