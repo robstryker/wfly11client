@@ -37,6 +37,7 @@ import org.jboss.as.controller.client.helpers.standalone.ServerUpdateActionResul
 import org.jboss.dmr.ModelNode;
 import org.wildfly.security.auth.callback.CallbackUtil;
 import org.wildfly.security.auth.callback.CredentialCallback;
+import org.wildfly.security.auth.callback.OptionalNameCallback;
 import org.wildfly.security.credential.PasswordCredential;
 import org.wildfly.security.password.interfaces.ClearPassword;
 import org.wildfly.security.password.interfaces.DigestPassword;
@@ -46,7 +47,7 @@ public class WildFlyClient {
 
     public static final String USER = "test4";
     public static final String PASS = "testpassword1";
-    public static final String DATA_PREFIX = "/home/rob/Documents/programming/bugs/wf11client/wfly11client/data/";
+    public static final String DATA_PREFIX = System.getProperty("basedir", "/home/ehsavoie/dev/wfly11client") + "/data/";
 
     public static void main(String[] args) throws Exception {
         new WildFlyClient().runIncrementalTest();
@@ -155,6 +156,9 @@ public class WildFlyClient {
                 throw new Exception("Failed");
             }
 
+            //Explode the jar
+            ServerDeploymentPlanResult planResult = explode("out.war" , "WEB-INF/lib/UtilOne.jar");
+            System.out.println(planResult);
             // incrementally update the class file inside the jar inside the war
             m = new IncrementalManagementModel();
             changedContent = new HashMap<String, String>();
@@ -202,6 +206,16 @@ public class WildFlyClient {
         } finally {
             client.close();
         }
+    }
+
+    public ServerDeploymentPlanResult explode(String deploymentName, String path) throws Exception {
+        DeploymentPlanBuilder b = manager.newDeploymentPlan();
+        b.undeploy(deploymentName);
+        b.explodeDeploymentContent(deploymentName, path);
+        b.deploy(deploymentName);
+        DeploymentPlan plan = b.build();
+        Future<ServerDeploymentPlanResult> future = manager.execute(plan);
+        return future.get(5000, TimeUnit.MILLISECONDS);
     }
 
     public ServerDeploymentActionResult incrementalPublish(String deploymentName, IncrementalManagementModel model,
@@ -340,8 +354,7 @@ public class WildFlyClient {
         private String realm;
 
         public void handle(Callback[] callbacks) throws IOException, UnsupportedCallbackException {
-            if (callbacks.length == 1 && callbacks[0] instanceof NameCallback) {
-                ((NameCallback) callbacks[0]).setName("anonymous JBossTools user");
+            if (callbacks.length == 2 && callbacks[0] instanceof OptionalNameCallback) {
                 return;
             }
 
