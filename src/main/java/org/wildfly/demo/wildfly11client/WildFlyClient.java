@@ -161,12 +161,11 @@ public class WildFlyClient {
             System.out.println(planResult);
             // incrementally update the class file inside the jar inside the war
             m = new IncrementalManagementModel();
-            changedContent = new HashMap<String, String>();
-            removedContent = new ArrayList<String>();
-            changedContent.put("util/pak/UtilModel.class",
-                    DATA_PREFIX + "UtilModel_Change1.class");
-            m.put("out.war/WEB-INF/lib/UtilOne.jar", changedContent, removedContent);
-            ServerDeploymentActionResult r = incrementalPublish("out.war/WEB-INF/lib/UtilOne.jar", m, true);
+            changedContent = new HashMap<>();
+            removedContent = new ArrayList<>();
+            changedContent.put("WEB-INF/lib/UtilOne.jar/util/pak/UtilModel.class", DATA_PREFIX + "UtilModel_Change1.class");
+            m.put("out.war", changedContent, removedContent);
+            ServerDeploymentActionResult r = incrementalPublish("out.war", m, true);
             System.out.println(r.getResult());
             if (r.getResult() == Result.NOT_EXECUTED) {
                 System.out.println("Failed incremental change to file inside util jar inside war");
@@ -209,10 +208,10 @@ public class WildFlyClient {
     }
 
     public ServerDeploymentPlanResult explode(String deploymentName, String path) throws Exception {
-        DeploymentPlanBuilder b = manager.newDeploymentPlan();
-        b.undeploy(deploymentName);
-        b.explodeDeploymentContent(deploymentName, path);
-        b.deploy(deploymentName);
+        DeploymentPlanBuilder b = manager.newDeploymentPlan()
+                .undeploy(deploymentName)
+                .explodeDeploymentContent(deploymentName, path)
+                .deploy(deploymentName);
         DeploymentPlan plan = b.build();
         Future<ServerDeploymentPlanResult> future = manager.execute(plan);
         return future.get(5000, TimeUnit.MILLISECONDS);
@@ -224,14 +223,15 @@ public class WildFlyClient {
         DeploymentPlanBuilder b = manager.newDeploymentPlan();
         try {
             String[] deployments = model.keys();
-            for (int i = 0; i < deployments.length; i++) {
-                Map<String, String> changed = model.getChanged(deployments[i]);
-                List<String> removed = model.getRemoved(deployments[i]);
-                b = addChanges(deployments[i], changed, removed, b);
+            for (String deployment : deployments) {
+                Map<String, String> changed = model.getChanged(deployment);
+                List<String> removed = model.getRemoved(deployment);
+                b = addChanges(deployment, changed, removed, b);
             }
 
-            if (redeploy)
+            if (redeploy) {
                 b = b.redeploy(deploymentName);
+            }
 
             DeploymentAction action = b.getLastAction();
             DeploymentPlan plan = b.build();
