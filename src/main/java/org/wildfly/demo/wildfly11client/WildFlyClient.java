@@ -50,7 +50,9 @@ public class WildFlyClient {
     public static final String DATA_PREFIX = System.getProperty("basedir", "/home/ehsavoie/dev/wfly11client") + "/data/";
 
     public static void main(String[] args) throws Exception {
-        new WildFlyClient().runIncrementalTest();
+        WildFlyClient wildFlyClient = new WildFlyClient();
+        wildFlyClient.runIncrementalTest();
+        wildFlyClient.runExplodedTest();
     }
 
     ModelControllerClient client;
@@ -65,7 +67,7 @@ public class WildFlyClient {
             undeploy("out.war", true);
             DeploymentOperationResult result = deploy("out.war",
                     new File(DATA_PREFIX + "out_with_jar.war"),
-                    new String[] { "out.war", "out.war/WEB-INF/lib/UtilOne.jar" }, true);
+                    new String[]{"out.war", "out.war/WEB-INF/lib/UtilOne.jar"}, true);
             waitFor(result, "Some task");
 
             System.out.println(result.getStatus().getResult());
@@ -84,7 +86,6 @@ public class WildFlyClient {
         }
     }
 
-
     public void runIncrementalTest() throws Exception {
         try {
             this.client = ModelControllerClient.Factory.create("localhost", 9990, new TestWF11CallbackHandler(), null,
@@ -95,7 +96,7 @@ public class WildFlyClient {
 
             DeploymentOperationResult result = deploy("out.war",
                     new File(DATA_PREFIX + "out_initial.war"),
-                    new String[] { "out.war" }, true);
+                    new String[]{"out.war"}, true);
             waitFor(result, "Some task");
             System.out.println(result.getStatus().getResult());
             if (result.getStatus().getResult() != ServerUpdateActionResult.Result.EXECUTED) {
@@ -129,7 +130,7 @@ public class WildFlyClient {
 
             result = deploy("out.war",
                     new File(DATA_PREFIX + "out_with_jar.war"),
-                    new String[] { "out.war" }, true);
+                    new String[]{"out.war"}, true);
             waitFor(result, "Some task");
             System.out.println(result.getStatus().getResult());
             if (result.getStatus().getResult() != ServerUpdateActionResult.Result.EXECUTED) {
@@ -145,7 +146,6 @@ public class WildFlyClient {
 
             // web should return something like:
             // Served jar:1491340851960:/DWe87rbb:Util:0
-
             String[] split = contents.split(":");
             if (split.length != 5) {
                 System.out.println("Failed expected segment count");
@@ -157,7 +157,7 @@ public class WildFlyClient {
             }
 
             //Explode the jar
-            ServerDeploymentPlanResult planResult = explode("out.war" , "WEB-INF/lib/UtilOne.jar");
+            ServerDeploymentPlanResult planResult = explode("out.war", "WEB-INF/lib/UtilOne.jar");
             System.out.println(planResult);
             // incrementally update the class file inside the jar inside the war
             m = new IncrementalManagementModel();
@@ -302,10 +302,15 @@ public class WildFlyClient {
             throws Exception {
         try {
             DeploymentPlanBuilder b = manager.newDeploymentPlan();
-            if (add)
+            if (add) {
                 b = b.add(name, file);
+            }
             for (int i = 0; i < explodedPaths.length; i++) {
-                b = b.explodeDeployment(explodedPaths[i]);
+                if (name.equals(explodedPaths[i])) {
+                    b = b.explodeDeployment(explodedPaths[i]);
+                } else {
+                    b.explodeDeploymentContent(name, explodedPaths[i]);
+                }
             }
             return execute(b.deploy(name));
         } catch (IOException e) {
@@ -316,7 +321,8 @@ public class WildFlyClient {
     private DeploymentOperationResult execute(DeploymentPlanBuilder builder) throws Exception {
         try {
             DeploymentAction action = builder.getLastAction();
-            Future<ServerDeploymentPlanResult> planResult = manager.execute(builder.build());
+            DeploymentPlan plan = builder.build();
+            Future<ServerDeploymentPlanResult> planResult = manager.execute(plan);
             return new DeploymentOperationResult(action, planResult);
         } catch (Exception e) {
             throw e;
@@ -324,6 +330,7 @@ public class WildFlyClient {
     }
 
     protected static class TestCallbackHandler implements CallbackHandler {
+
         public void handle(Callback[] callbacks) throws IOException, UnsupportedCallbackException {
             if (callbacks.length == 1 && callbacks[0] instanceof NameCallback) {
                 ((NameCallback) callbacks[0]).setName("anonymous JBossTools user");
@@ -337,7 +344,7 @@ public class WildFlyClient {
                     RealmCallback rcb = (RealmCallback) current;
                     String defaultText = rcb.getDefaultText();
                     rcb.setText(defaultText); // For now just use the realm
-                                                // suggested.
+                    // suggested.
                 }
                 if (current instanceof NameCallback) {
                     name = (NameCallback) current;
@@ -351,6 +358,7 @@ public class WildFlyClient {
     }
 
     protected static class TestWF11CallbackHandler implements CallbackHandler {
+
         private String realm;
 
         public void handle(Callback[] callbacks) throws IOException, UnsupportedCallbackException {
@@ -366,7 +374,7 @@ public class WildFlyClient {
                     realm = rcb.getPrompt();
                     String defaultText = rcb.getDefaultText();
                     rcb.setText(defaultText); // For now just use the realm
-                                                // suggested.
+                    // suggested.
                 }
                 if (current instanceof NameCallback) {
                     name = (NameCallback) current;
@@ -421,8 +429,9 @@ public class WildFlyClient {
                 throw e;
             } catch (SocketException se) {
                 resetCount++;
-                if (resetCount >= 10)
+                if (resetCount >= 10) {
                     throw se;
+                }
             } finally {
                 connection.disconnect();
             }
@@ -460,10 +469,11 @@ public class WildFlyClient {
     public DeploymentOperationResult undeploy(String name, boolean removeFile) throws Exception {
         try {
             DeploymentPlanBuilder builder = manager.newDeploymentPlan();
-            if (removeFile)
+            if (removeFile) {
                 builder = builder.undeploy(name).andRemoveUndeployed();
-            else
+            } else {
                 builder = builder.undeploy(name);
+            }
             return new DeploymentOperationResult(builder.getLastAction(), manager.execute(builder.build()));
         } catch (Exception e) {
             throw e;
