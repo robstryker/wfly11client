@@ -37,6 +37,7 @@ import org.jboss.as.controller.client.helpers.standalone.ServerUpdateActionResul
 import org.jboss.dmr.ModelNode;
 import org.wildfly.security.auth.callback.CallbackUtil;
 import org.wildfly.security.auth.callback.CredentialCallback;
+import org.wildfly.security.auth.callback.OptionalNameCallback;
 import org.wildfly.security.credential.PasswordCredential;
 import org.wildfly.security.password.interfaces.ClearPassword;
 import org.wildfly.security.password.interfaces.DigestPassword;
@@ -46,10 +47,12 @@ public class WildFlyClient {
 
     public static final String USER = "test4";
     public static final String PASS = "testpassword1";
-    public static final String DATA_PREFIX = "/home/rob/Documents/programming/bugs/wf11client/wfly11client/data/";
+    public static final String DATA_PREFIX = System.getProperty("basedir", "/home/ehsavoie/dev/wfly11client") + "/data/";
 
     public static void main(String[] args) throws Exception {
-        new WildFlyClient().runIncrementalTest();
+        WildFlyClient wildFlyClient = new WildFlyClient();
+        wildFlyClient.runIncrementalTest();
+        wildFlyClient.runExplodedTest();
     }
 
     ModelControllerClient client;
@@ -64,7 +67,7 @@ public class WildFlyClient {
             undeploy("out.war", true);
             DeploymentOperationResult result = deploy("out.war",
                     new File(DATA_PREFIX + "out_with_jar.war"),
-                    new String[] { "out.war", "out.war/WEB-INF/lib/UtilOne.jar" }, true);
+                    new String[]{"out.war", "out.war/WEB-INF/lib/UtilOne.jar"}, true);
             waitFor(result, "Some task");
 
             System.out.println(result.getStatus().getResult());
@@ -83,7 +86,6 @@ public class WildFlyClient {
         }
     }
 
-
     public void runIncrementalTest() throws Exception {
         try {
             this.client = ModelControllerClient.Factory.create("localhost", 9990, new TestWF11CallbackHandler(), null,
@@ -94,7 +96,7 @@ public class WildFlyClient {
 
             DeploymentOperationResult result = deploy("out.war",
                     new File(DATA_PREFIX + "out_initial.war"),
-                    new String[] { "out.war" }, true);
+                    new String[]{"out.war"}, true);
             waitFor(result, "Some task");
             System.out.println(result.getStatus().getResult());
             if (result.getStatus().getResult() != ServerUpdateActionResult.Result.EXECUTED) {
@@ -128,7 +130,7 @@ public class WildFlyClient {
 
             result = deploy("out.war",
                     new File(DATA_PREFIX + "out_with_jar.war"),
-                    new String[] { "out.war" }, true);
+                    new String[]{"out.war"}, true);
             waitFor(result, "Some task");
             System.out.println(result.getStatus().getResult());
             if (result.getStatus().getResult() != ServerUpdateActionResult.Result.EXECUTED) {
@@ -144,7 +146,6 @@ public class WildFlyClient {
 
             // web should return something like:
             // Served jar:1491340851960:/DWe87rbb:Util:0
-
             String[] split = contents.split(":");
             if (split.length != 5) {
                 System.out.println("Failed expected segment count");
@@ -155,14 +156,16 @@ public class WildFlyClient {
                 throw new Exception("Failed");
             }
 
+            //Explode the jar
+            ServerDeploymentPlanResult planResult = explode("out.war", "WEB-INF/lib/UtilOne.jar");
+            System.out.println(planResult);
             // incrementally update the class file inside the jar inside the war
             m = new IncrementalManagementModel();
-            changedContent = new HashMap<String, String>();
-            removedContent = new ArrayList<String>();
-            changedContent.put("util/pak/UtilModel.class",
-                    DATA_PREFIX + "UtilModel_Change1.class");
-            m.put("out.war/WEB-INF/lib/UtilOne.jar", changedContent, removedContent);
-            ServerDeploymentActionResult r = incrementalPublish("out.war/WEB-INF/lib/UtilOne.jar", m, true);
+            changedContent = new HashMap<>();
+            removedContent = new ArrayList<>();
+            changedContent.put("WEB-INF/lib/UtilOne.jar/util/pak/UtilModel.class", DATA_PREFIX + "UtilModel_Change1.class");
+            m.put("out.war", changedContent, removedContent);
+            ServerDeploymentActionResult r = incrementalPublish("out.war", m, true);
             System.out.println(r.getResult());
             if (r.getResult() == Result.NOT_EXECUTED) {
                 System.out.println("Failed incremental change to file inside util jar inside war");
@@ -204,20 +207,31 @@ public class WildFlyClient {
         }
     }
 
+    public ServerDeploymentPlanResult explode(String deploymentName, String path) throws Exception {
+        DeploymentPlanBuilder b = manager.newDeploymentPlan()
+                .undeploy(deploymentName)
+                .explodeDeploymentContent(deploymentName, path)
+                .deploy(deploymentName);
+        DeploymentPlan plan = b.build();
+        Future<ServerDeploymentPlanResult> future = manager.execute(plan);
+        return future.get(5000, TimeUnit.MILLISECONDS);
+    }
+
     public ServerDeploymentActionResult incrementalPublish(String deploymentName, IncrementalManagementModel model,
             boolean redeploy) throws Exception {
 
         DeploymentPlanBuilder b = manager.newDeploymentPlan();
         try {
             String[] deployments = model.keys();
-            for (int i = 0; i < deployments.length; i++) {
-                Map<String, String> changed = model.getChanged(deployments[i]);
-                List<String> removed = model.getRemoved(deployments[i]);
-                b = addChanges(deployments[i], changed, removed, b);
+            for (String deployment : deployments) {
+                Map<String, String> changed = model.getChanged(deployment);
+                List<String> removed = model.getRemoved(deployment);
+                b = addChanges(deployment, changed, removed, b);
             }
 
-            if (redeploy)
+            if (redeploy) {
                 b = b.redeploy(deploymentName);
+            }
 
             DeploymentAction action = b.getLastAction();
             DeploymentPlan plan = b.build();
@@ -288,10 +302,15 @@ public class WildFlyClient {
             throws Exception {
         try {
             DeploymentPlanBuilder b = manager.newDeploymentPlan();
-            if (add)
+            if (add) {
                 b = b.add(name, file);
+            }
             for (int i = 0; i < explodedPaths.length; i++) {
-                b = b.explodeDeployment(explodedPaths[i]);
+                if (name.equals(explodedPaths[i])) {
+                    b = b.explodeDeployment(explodedPaths[i]);
+                } else {
+                    b.explodeDeploymentContent(name, explodedPaths[i]);
+                }
             }
             return execute(b.deploy(name));
         } catch (IOException e) {
@@ -302,7 +321,8 @@ public class WildFlyClient {
     private DeploymentOperationResult execute(DeploymentPlanBuilder builder) throws Exception {
         try {
             DeploymentAction action = builder.getLastAction();
-            Future<ServerDeploymentPlanResult> planResult = manager.execute(builder.build());
+            DeploymentPlan plan = builder.build();
+            Future<ServerDeploymentPlanResult> planResult = manager.execute(plan);
             return new DeploymentOperationResult(action, planResult);
         } catch (Exception e) {
             throw e;
@@ -310,6 +330,7 @@ public class WildFlyClient {
     }
 
     protected static class TestCallbackHandler implements CallbackHandler {
+
         public void handle(Callback[] callbacks) throws IOException, UnsupportedCallbackException {
             if (callbacks.length == 1 && callbacks[0] instanceof NameCallback) {
                 ((NameCallback) callbacks[0]).setName("anonymous JBossTools user");
@@ -323,7 +344,7 @@ public class WildFlyClient {
                     RealmCallback rcb = (RealmCallback) current;
                     String defaultText = rcb.getDefaultText();
                     rcb.setText(defaultText); // For now just use the realm
-                                                // suggested.
+                    // suggested.
                 }
                 if (current instanceof NameCallback) {
                     name = (NameCallback) current;
@@ -337,11 +358,11 @@ public class WildFlyClient {
     }
 
     protected static class TestWF11CallbackHandler implements CallbackHandler {
+
         private String realm;
 
         public void handle(Callback[] callbacks) throws IOException, UnsupportedCallbackException {
-            if (callbacks.length == 1 && callbacks[0] instanceof NameCallback) {
-                ((NameCallback) callbacks[0]).setName("anonymous JBossTools user");
+            if (callbacks.length == 2 && callbacks[0] instanceof OptionalNameCallback) {
                 return;
             }
 
@@ -353,7 +374,7 @@ public class WildFlyClient {
                     realm = rcb.getPrompt();
                     String defaultText = rcb.getDefaultText();
                     rcb.setText(defaultText); // For now just use the realm
-                                                // suggested.
+                    // suggested.
                 }
                 if (current instanceof NameCallback) {
                     name = (NameCallback) current;
@@ -408,8 +429,9 @@ public class WildFlyClient {
                 throw e;
             } catch (SocketException se) {
                 resetCount++;
-                if (resetCount >= 10)
+                if (resetCount >= 10) {
                     throw se;
+                }
             } finally {
                 connection.disconnect();
             }
@@ -447,10 +469,11 @@ public class WildFlyClient {
     public DeploymentOperationResult undeploy(String name, boolean removeFile) throws Exception {
         try {
             DeploymentPlanBuilder builder = manager.newDeploymentPlan();
-            if (removeFile)
+            if (removeFile) {
                 builder = builder.undeploy(name).andRemoveUndeployed();
-            else
+            } else {
                 builder = builder.undeploy(name);
+            }
             return new DeploymentOperationResult(builder.getLastAction(), manager.execute(builder.build()));
         } catch (Exception e) {
             throw e;
